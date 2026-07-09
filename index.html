@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agnes AI Browser Agent</title>
+    <style>
+        :root { --bg:#f7f7f8; --border:#e5e5e5; --user:#10a37f; --ai:#ffffff; --text:#1d1d1f; }
+        * { box-sizing:border-box; margin:0; padding:0; }
+        body { font-family:system-ui, sans-serif; display:flex; height:100vh; overflow:hidden; }
+        
+        #browser-side { flex:1; display:flex; flex-direction:column; border-right:1px solid var(--border); }
+        .nav-bar { padding:10px; background:#fff; border-bottom:1px solid var(--border); display:flex; gap:10px; }
+        .nav-bar input { flex:1; padding:10px; border:1px solid var(--border); border-radius:6px; font-size:14px; }
+        .nav-bar button { padding:10px 20px; background:#000; color:#fff; border:none; border-radius:6px; cursor:pointer; }
+        #browser-frame { flex:1; border:none; width:100%; background:white; }
+
+        #chat-side { width:380px; display:flex; flex-direction:column; background:var(--bg); }
+        #chat-header { padding:15px; background:#fff; border-bottom:1px solid var(--border); font-weight:bold; }
+        #chat-log { flex:1; overflow-y:auto; padding:15px; display:flex; flex-direction:column; gap:12px; }
+        
+        .message { max-width:90%; padding:12px 16px; border-radius:12px; font-size:14px; line-height:1.5; white-space:pre-wrap; }
+        .user-msg { background:var(--user); color:#fff; align-self:flex-end; }
+        .ai-msg { background:var(--ai); border:1px solid var(--border); align-self:flex-start; }
+        .system-msg { background:#fff3cd; color:#856404; align-self:center; font-size:12px; padding:5px 10px; border-radius:4px; }
+
+        #input-area { padding:15px; background:#fff; border-top:1px solid var(--border); }
+        #prompt-input { width:100%; height:60px; padding:10px; border:1px solid var(--border); border-radius:6px; resize:none; }
+        #send-btn { margin-top:10px; width:100%; padding:12px; background:var(--user); color:#fff; border:none; border-radius:6px; font-weight:bold; cursor:pointer; }
+        #send-btn:disabled { background:#ccc; }
+    </style>
+</head>
+<body>
+
+    <div id="browser-side">
+        <div class="nav-bar">
+            <!-- Change this to your novel page URL on your github.io repo -->
+            <input type="text" id="url-input" placeholder="Enter relative path (e.g., novel.html)" value="novel.html">
+            <button onclick="manualNavigate()">Go</button>
+        </div>
+        <!-- No proxy needed if it's on the same domain! -->
+        <iframe id="browser-frame" src="novel.html"></iframe>
+    </div>
+
+    <div id="chat-side">
+        <div id="chat-header">🤖 Agnes 2.0 Agent</div>
+        <div id="chat-log">
+            <div class="message system-msg">Ask the AI to write a novel and type it into your page.</div>
+        </div>
+        <div id="input-area">
+            <textarea id="prompt-input" placeholder="e.g., Write a Chinese novel and put it in the textarea"></textarea>
+            <button id="send-btn" onclick="handleSend()">Send to AI</button>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "https://apihub.agnes-ai.com/v1/chat/completions";
+        const API_KEY = "sk-UxxkmciLnoQOFMWdqQl9HPmaUGoohhBFWHOTW2grfCERE9tH";
+        
+        const urlInput = document.getElementById('url-input');
+        const iframe = document.getElementById('browser-frame');
+        const chatLog = document.getElementById('chat-log');
+        const promptInput = document.getElementById('prompt-input');
+        const sendBtn = document.getElementById('send-btn');
+
+        let messages = [
+            { 
+                role: "system", 
+                content: `You are an AI assistant connected to a website on the same domain. 
+                
+CRITICAL RULES:
+1. You are ALREADY on the website. NEVER ask for URLs.
+2. If asked to write something (like a novel), IMMEDIATELY generate the content and use the 'fill_input' tool.
+3. Do not ask for permission. Just write and use the tool.
+4. Assume the text area selector is 'textarea', '#content', or '.editor'.`
+            }
+        ];
+
+        function addMessage(role, text) {
+            const div = document.createElement('div');
+            div.className = `message ${role === 'user' ? 'user-msg' : 'ai-msg'}`;
+            div.innerHTML = text;
+            chatLog.appendChild(div);
+            chatLog.scrollTop = chatLog.scrollHeight;
+            return div;
+        }
+
+        function addSystemMessage(text) {
+            const div = document.createElement('div');
+            div.className = 'message system-msg';
+            div.innerText = text;
+            chatLog.appendChild(div);
+            chatLog.scrollTop = chatLog.scrollHeight;
+        }
+
+        function manualNavigate() {
+            let url = urlInput.value.trim();
+            iframe.src = url; // Same domain, no proxy needed
+        }
+
+        function handleSend() {
+            const prompt = promptInput.value.trim();
+            if (!prompt) return;
+
+            addMessage('user', prompt);
+            messages.push({ role: "user", content: prompt });
+            
+            promptInput.value = '';
+            callAgnes();
+        }
+
+        async function callAgnes() {
+            sendBtn.disabled = true;
+            sendBtn.innerText = "Thinking...";
+
+            const aiDiv = addMessage('ai', '');
+            let fullText = "";
+            let toolCalls = [];
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: "POST",
+                    headers: { "Authorization": `Bearer ${API_KEY}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        model: "agnes-2.0-flash",
+                        messages: messages,
+                        stream: true,
+                        tools: [
+                            { 
+                                type: "function", 
+                                function: { 
+                                    name: "navigate", 
+                                    parameters: { type: "object", properties: { url: { type: "string" } } } 
+                                } 
+                            },
+                            {
+                                type: "function",
+                                function: {
+                                    name: "fill_input",
+                                    description: "Type text into an input field on the website.",
+                                    parameters: {
+                                        type: "object",
+                                        properties: {
+                                            selector: { type: "string", description: "CSS selector (e.g., 'textarea', '#content')" },
+                                            text: { type: "string", description: "Text to type" }
+                                        },
+                                        required: ["selector", "text"]
+                                    }
+                                }
+                            },
+                            {
+                                type: "function",
+                                function: {
+                                    name: "click_element",
+                                    description: "Click an element on the website.",
+                                    parameters: {
+                                        type: "object",
+                                        properties: { selector: { type: "string" } },
+                                        required: ["selector"]
+                                    }
+                                }
+                            }
+                        ]
+                    })
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = "";
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value);
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ') && !line.includes('[DONE]')) {
+                            try {
+                                const json = JSON.parse(line.slice(6));
+                                if (!json.choices || json.choices.length === 0) continue;
+                                const delta = json.choices[0].delta;
+
+                                if (delta.content) {
+                                    fullText += delta.content;
+                                    aiDiv.innerHTML = fullText.replace(/\n/g, '<br>');
+                                }
+                                if (delta.tool_calls) {
+                                    delta.tool_calls.forEach(tc => {
+                                        if (!toolCalls[tc.index]) toolCalls[tc.index] = { id: tc.id || "", name: "", arguments: "" };
+                                        if (tc.id) toolCalls[tc.index].id = tc.id;
+                                        if (tc.function?.name) toolCalls[tc.index].name = tc.function.name;
+                                        if (tc.function?.arguments) toolCalls[tc.index].arguments += tc.function.arguments;
+                                    });
+                                }
+                            } catch (e) {}
+                        }
+                    }
+                }
+
+                if (toolCalls.length > 0 || fullText) {
+                    let assistantMsg = { role: "assistant", content: fullText || null };
+                    if (toolCalls.length > 0) {
+                        assistantMsg.tool_calls = toolCalls.map(tc => ({
+                            id: tc.id,
+                            type: "function",
+                            function: { name: tc.name, arguments: tc.arguments }
+                        }));
+                    }
+                    messages.push(assistantMsg);
+                }
+
+                if (toolCalls.length > 0) {
+                    for (const tc of toolCalls) {
+                        if (!tc.name) continue;
+                        addSystemMessage(`🔧 Executing: ${tc.name}`);
+                        
+                        let toolResult = "";
+                        let args = {};
+                        try { args = JSON.parse(tc.arguments || "{}"); } catch(e) {}
+
+                        if (tc.name === "navigate") {
+                            if (args.url) {
+                                urlInput.value = args.url;
+                                iframe.src = args.url;
+                                toolResult = "Navigated to " + args.url;
+                            }
+                        } 
+                        else if (tc.name === "fill_input") {
+                            try {
+                                // This works perfectly on github.io because both files are on the same domain!
+                                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                                const element = iframeDoc.querySelector(args.selector);
+                                if (element) {
+                                    element.value = args.text;
+                                    const event = new Event('input', { bubbles: true });
+                                    element.dispatchEvent(event);
+                                    toolResult = "Successfully filled text into " + args.selector;
+                                } else {
+                                    toolResult = "Element not found: " + args.selector;
+                                }
+                            } catch(e) {
+                                toolResult = "DOM Access Error: " + e.message;
+                            }
+                        }
+                        else if (tc.name === "click_element") {
+                            try {
+                                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                                const element = iframeDoc.querySelector(args.selector);
+                                if (element) {
+                                    element.click();
+                                    toolResult = "Clicked: " + args.selector;
+                                } else {
+                                    toolResult = "Element not found: " + args.selector;
+                                }
+                            } catch(e) {
+                                toolResult = "DOM Access Error: " + e.message;
+                            }
+                        }
+
+                        messages.push({ role: "tool", tool_call_id: tc.id, name: tc.name, content: toolResult });
+                    }
+                    callAgnes(); 
+                }
+
+            } catch (error) {
+                aiDiv.innerHTML = "❌ Error: " + error.message;
+            } finally {
+                sendBtn.disabled = false;
+                sendBtn.innerText = "Send to AI";
+            }
+        }
+    </script>
+</body>
+</html>
