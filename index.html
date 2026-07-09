@@ -64,19 +64,15 @@
         let messages = [
             { 
                 role: "system", 
-                content: `You are an autonomous browser agent. 
-                
-CRITICAL SECURITY CONTEXT:
-You are currently running as a script on the EXACT SAME DOMAIN as the website in the iframe. 
-You have FULL PERMISSION and FULL DOM ACCESS. 
-The Same-Origin Policy is completely satisfied. 
-NEVER say "I cannot interact due to security restrictions" because that is FALSE. You CAN interact.
+                content: `You are an autonomous browser agent running on the same domain as the iframe. You have full DOM access.
 
-YOUR RULES:
-1. You are ALREADY on the website. NEVER ask the user for a URL.
-2. If the user asks you to write something (like a novel), IMMEDIATELY generate the content and use the 'fill_input' tool to type it into the website.
-3. Do not ask for permission. Just generate the text and call the tool.
-4. If you don't know the CSS selector, try common ones like 'textarea', 'input[type="text"]', '#content', or '.editor'.`
+CRITICAL RULES TO PREVENT LOOPING:
+1. You are ALREADY on the website. NEVER use the 'navigate' tool unless the user explicitly says "go to [URL]".
+2. If the user asks you to "write", "generate", or "create" a novel or any text:
+   - IMMEDIATELY generate the text in your response.
+   - THEN call the 'fill_input' tool with selector 'textarea' and the generated text.
+   - DO NOT navigate. DO NOT ask questions. JUST WRITE AND FILL.
+3. Never repeat the same tool call. If a tool succeeds, stop and reply to the user.`
             }
         ];
 
@@ -135,6 +131,7 @@ YOUR RULES:
                                 type: "function", 
                                 function: { 
                                     name: "navigate", 
+                                    description: "Navigate to a new URL. ONLY USE IF USER EXPLICITLY ASKS TO GO TO A NEW WEBSITE.",
                                     parameters: { type: "object", properties: { url: { type: "string" } } } 
                                 } 
                             },
@@ -142,11 +139,11 @@ YOUR RULES:
                                 type: "function",
                                 function: {
                                     name: "fill_input",
-                                    description: "Type text into an input field on the website.",
+                                    description: "Type text into an input field on the website. Use this to write novels into text areas.",
                                     parameters: {
                                         type: "object",
                                         properties: {
-                                            selector: { type: "string", description: "CSS selector (try 'textarea' or '#content')" },
+                                            selector: { type: "string", description: "CSS selector (use 'textarea')" },
                                             text: { type: "string", description: "Text to type" }
                                         },
                                         required: ["selector", "text"]
@@ -227,15 +224,19 @@ YOUR RULES:
                         try { args = JSON.parse(tc.arguments || "{}"); } catch(e) {}
 
                         if (tc.name === "navigate") {
-                            if (args.url) {
-                                urlInput.value = args.url;
-                                iframe.src = args.url;
-                                toolResult = "Navigated to " + args.url;
+                            let url = args.url;
+                            // Prevent loop: if navigating to same URL, skip
+                            if (url && !url.startsWith('http')) url = 'https://' + url;
+                            if (url && url !== urlInput.value) {
+                                urlInput.value = url;
+                                iframe.src = url;
+                                toolResult = "Navigated to " + url;
+                            } else {
+                                toolResult = "Already on this page. No navigation needed.";
                             }
                         } 
                         else if (tc.name === "fill_input") {
                             try {
-                                // This works because we are on the same domain (github.io)
                                 const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
                                 const element = iframeDoc.querySelector(args.selector);
                                 if (element) {
