@@ -3,52 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Agnes AI Browser Agent</title>
+    <title>Agnes AI Browser</title>
     <style>
-        :root { --bg:#f7f7f8; --border:#e5e5e5; --user:#10a37f; --ai:#ffffff; --text:#1d1d1f; }
-        * { box-sizing:border-box; margin:0; padding:0; }
-        body { font-family:system-ui, sans-serif; display:flex; height:100vh; overflow:hidden; }
+        body { margin: 0; font-family: Arial, sans-serif; display: flex; height: 100vh; background: #f0f2f5; }
         
-        #browser-side { flex:1; display:flex; flex-direction:column; border-right:1px solid var(--border); }
-        .nav-bar { padding:10px; background:#fff; border-bottom:1px solid var(--border); display:flex; gap:10px; }
-        .nav-bar input { flex:1; padding:10px; border:1px solid var(--border); border-radius:6px; font-size:14px; }
-        .nav-bar button { padding:10px 20px; background:#000; color:#fff; border:none; border-radius:6px; cursor:pointer; }
-        #browser-frame { flex:1; border:none; width:100%; background:white; }
+        /* Browser Side */
+        #browser-side { flex: 1; display: flex; flex-direction: column; border-right: 1px solid #ccc; }
+        .nav-bar { padding: 10px; background: #fff; border-bottom: 1px solid #ccc; display: flex; gap: 10px; }
+        .nav-bar input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+        .nav-bar button { padding: 10px 15px; background: #000; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+        #browser-frame { flex: 1; border: none; width: 100%; background: #fff; }
 
-        #chat-side { width:380px; display:flex; flex-direction:column; background:var(--bg); }
-        #chat-header { padding:15px; background:#fff; border-bottom:1px solid var(--border); font-weight:bold; }
-        #chat-log { flex:1; overflow-y:auto; padding:15px; display:flex; flex-direction:column; gap:12px; }
+        /* Chat Side */
+        #chat-side { width: 400px; display: flex; flex-direction: column; background: #fff; }
+        #chat-header { padding: 15px; background: #fafafa; border-bottom: 1px solid #ccc; font-weight: bold; }
+        #chat-log { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; }
         
-        .message { max-width:90%; padding:12px 16px; border-radius:12px; font-size:14px; line-height:1.5; white-space:pre-wrap; }
-        .user-msg { background:var(--user); color:#fff; align-self:flex-end; }
-        .ai-msg { background:var(--ai); border:1px solid var(--border); align-self:flex-start; }
-        .system-msg { background:#fff3cd; color:#856404; align-self:center; font-size:12px; padding:5px 10px; border-radius:4px; }
+        .message { max-width: 90%; padding: 12px 16px; border-radius: 12px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
+        .user-msg { background: #007bff; color: #fff; align-self: flex-end; }
+        .ai-msg { background: #f1f1f1; color: #000; align-self: flex-start; }
+        .system-msg { background: #fff3cd; color: #856404; align-self: center; font-size: 12px; padding: 5px 10px; border-radius: 4px; }
 
-        #input-area { padding:15px; background:#fff; border-top:1px solid var(--border); }
-        #prompt-input { width:100%; height:60px; padding:10px; border:1px solid var(--border); border-radius:6px; resize:none; }
-        #send-btn { margin-top:10px; width:100%; padding:12px; background:var(--user); color:#fff; border:none; border-radius:6px; font-weight:bold; cursor:pointer; }
-        #send-btn:disabled { background:#ccc; }
+        #input-area { padding: 15px; border-top: 1px solid #ccc; }
+        #prompt-input { width: 100%; height: 60px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; resize: none; font-family: inherit; }
+        #send-btn { margin-top: 10px; width: 100%; padding: 12px; background: #28a745; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
+        #send-btn:disabled { background: #ccc; cursor: not-allowed; }
     </style>
 </head>
 <body>
 
     <div id="browser-side">
         <div class="nav-bar">
-            <!-- Change this to your novel page URL on your github.io repo -->
-            <input type="text" id="url-input" placeholder="Enter relative path (e.g., novel.html)" value="novel.html">
+            <input type="text" id="url-input" placeholder="Enter URL..." value="https://realyoking.github.io/brosai/">
             <button onclick="manualNavigate()">Go</button>
         </div>
-        <!-- No proxy needed if it's on the same domain! -->
-        <iframe id="browser-frame" src="novel.html"></iframe>
+        <iframe id="browser-frame" src="https://realyoking.github.io/brosai/"></iframe>
     </div>
 
     <div id="chat-side">
-        <div id="chat-header">🤖 Agnes 2.0 Agent</div>
+        <div id="chat-header">🤖 Agnes AI Controller</div>
         <div id="chat-log">
-            <div class="message system-msg">Ask the AI to write a novel and type it into your page.</div>
+            <div class="message system-msg">Ask the AI to write a novel and fill it into the page.</div>
         </div>
         <div id="input-area">
-            <textarea id="prompt-input" placeholder="e.g., Write a Chinese novel and put it in the textarea"></textarea>
+            <textarea id="prompt-input" placeholder="e.g., Write a Chinese novel and put it in the text box"></textarea>
             <button id="send-btn" onclick="handleSend()">Send to AI</button>
         </div>
     </div>
@@ -66,13 +64,19 @@
         let messages = [
             { 
                 role: "system", 
-                content: `You are an AI assistant connected to a website on the same domain. 
+                content: `You are an autonomous browser agent. 
                 
-CRITICAL RULES:
-1. You are ALREADY on the website. NEVER ask for URLs.
-2. If asked to write something (like a novel), IMMEDIATELY generate the content and use the 'fill_input' tool.
-3. Do not ask for permission. Just write and use the tool.
-4. Assume the text area selector is 'textarea', '#content', or '.editor'.`
+CRITICAL SECURITY CONTEXT:
+You are currently running as a script on the EXACT SAME DOMAIN as the website in the iframe. 
+You have FULL PERMISSION and FULL DOM ACCESS. 
+The Same-Origin Policy is completely satisfied. 
+NEVER say "I cannot interact due to security restrictions" because that is FALSE. You CAN interact.
+
+YOUR RULES:
+1. You are ALREADY on the website. NEVER ask the user for a URL.
+2. If the user asks you to write something (like a novel), IMMEDIATELY generate the content and use the 'fill_input' tool to type it into the website.
+3. Do not ask for permission. Just generate the text and call the tool.
+4. If you don't know the CSS selector, try common ones like 'textarea', 'input[type="text"]', '#content', or '.editor'.`
             }
         ];
 
@@ -95,7 +99,8 @@ CRITICAL RULES:
 
         function manualNavigate() {
             let url = urlInput.value.trim();
-            iframe.src = url; // Same domain, no proxy needed
+            if (!url.startsWith('http')) url = 'https://' + url;
+            iframe.src = url;
         }
 
         function handleSend() {
@@ -141,7 +146,7 @@ CRITICAL RULES:
                                     parameters: {
                                         type: "object",
                                         properties: {
-                                            selector: { type: "string", description: "CSS selector (e.g., 'textarea', '#content')" },
+                                            selector: { type: "string", description: "CSS selector (try 'textarea' or '#content')" },
                                             text: { type: "string", description: "Text to type" }
                                         },
                                         required: ["selector", "text"]
@@ -230,7 +235,7 @@ CRITICAL RULES:
                         } 
                         else if (tc.name === "fill_input") {
                             try {
-                                // This works perfectly on github.io because both files are on the same domain!
+                                // This works because we are on the same domain (github.io)
                                 const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
                                 const element = iframeDoc.querySelector(args.selector);
                                 if (element) {
